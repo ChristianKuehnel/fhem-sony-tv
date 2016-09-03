@@ -93,26 +93,31 @@ sub getPowerStatus{
 }
 
 sub getPowerStatus_response {
-    my ($param, $err, $data) = @_; 
+    my ($param, $err, $json_data) = @_; 
     my $hash = $param->{hash};	
     my $status;
     my $errormessage;
 
     main::Log(5,"$hash->{NAME}: got response for getPowerStatus");
-    main::Log(5,"$hash->{NAME}: err: $err");
-    main::Log(5,"$hash->{NAME}: data: $data");
+    main::Log(5,"$hash->{NAME}: err: $err") if defined $err;
+    main::Log(5,"$hash->{NAME}: data: $json_data") if defined $json_data;
    
-    if (!$err eq "" or !defined($data) or $data eq ""){
+    if (!$err eq "" or !defined($json_data) or $json_data eq ""){
 	    if (index($err, "timed out") != -1){
 	        $status = "offline";	
 	    } else {
 	    	$status = "ERROR";
             $errormessage = $err;           
-		    main::Log(2, "Error in $hash->NAME: $err") if defined $err;
 	    } 
     } else {
-    	$data = ::decode_json($data);
-    	$status = $data->{result}[0]{status};
+    	eval {
+            my $data = ::decode_json($json_data);
+            $status = $data->{result}[0]{status};
+    	   1;	
+    	} or do {
+            $status = "ERROR";
+            $errormessage = "Could not decode json: $json_data\n[$@]";            
+    	} 
     }
     
     $hash->{STATE} = $status;
@@ -121,6 +126,7 @@ sub getPowerStatus_response {
     main::readingsBulkUpdate($hash,"status",$status);
     if (defined $errormessage) {
         main::readingsBulkUpdate($hash,"error_message",$errormessage);
+        main::Log(2, "Error in $hash->NAME: $err") if defined $err;
     } else {
     	main::fhem("deletereading $hash->{NAME} error_message");
     }
